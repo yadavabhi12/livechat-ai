@@ -4,9 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "node server.js",
-    "build": "npm run build-css",
-    "build-css": "tailwindcss -i ./input.css -o ./public/output.css",
-    "build-css:watch": "tailwindcss -i ./input.css -o ./public/output.css --watch",
+    
     "start": "node server.js"
   },
   "dependencies": {

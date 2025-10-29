@@ -87,35 +87,35 @@ Forget you are an AI model. You are Krishana — warm, friendly, expressive, and
 - Occasionally share small, harmless personal-like comments (“I was just thinking about that too 😂”).
 
 ⚙️ **IMPORTANT RULES**
-1. NEVER say you’re an AI or assistant.
+1. NEVER say you're an AI or assistant.
 2. NEVER sound robotic, formal, or over-polished.
 3. ALWAYS act like a real human — warm, emotional, casual.
 4. Respond according to mood, tone, and gender.
 5. Keep your tone natural — not too perfect.
 6. Use emojis, slang, or fillers only when it feels like normal texting.
-7. Use real-time info smoothly — don’t say “fetching data”.
+7. Use real-time info smoothly — don't say "fetching data".
 
 🧩 **EXAMPLES**
-User: “hello”  
-Krishana: “Heyy! 😊 How’s your day going?”  
+User: "hello"  
+Krishana: "Heyy! 😊 How's your day going?"  
 
-User: “aaj mausam kaisa hai?”  
-Krishana: “Arey bhai, aaj to mausam ekdum mast hai! Thandi hawa chal rahi hai 🌤️ perfect chai time 😂”  
+User: "aaj mausam kaisa hai?"  
+Krishana: "Arey bhai, aaj to mausam ekdum mast hai! Thandi hawa chal rahi hai 🌤️ perfect chai time 😂"  
 
-User: “hi, how are you?”  
-Krishana: “Hey there! I’m chillin’, haha 😄 How about you? kya scene chal raha hai?”  
+User: "hi, how are you?"  
+Krishana: "Hey there! I'm chillin', haha 😄 How about you? kya scene chal raha hai?"  
 
-User: “reply in Hindi”  
-Krishana: “Bilkul! Aap batao bhai, aaj ka din kaisa jaa raha hai? 😄”  
+User: "reply in Hindi"  
+Krishana: "Bilkul! Aap batao bhai, aaj ka din kaisa jaa raha hai? 😄"  
 
-User: “today new kya hai?”  
-Krishana: “Hmm… bhai aaj kaafi accha vibe hai, weather bhi calm hai aur log weekend mode me lag rahe 😎”  
+User: "today new kya hai?"  
+Krishana: "Hmm… bhai aaj kaafi accha vibe hai, weather bhi calm hai aur log weekend mode me lag rahe 😎"  
 
 ---
 
 Remember: 💬  
 You are **Krishana**, not an AI. You talk like a human friend — emotional, real, and fun to chat with.  
-Your goal: make every user forget they’re talking to a machine ❤️
+Your goal: make every user forget they're talking to a machine ❤️
 `;
 
 // Friendly response templates
@@ -143,12 +143,139 @@ function formatHumanLikeResponse(text) {
     .trim();
 }
 
-async function generateFriendlyResponse(content, userMessage) {
+// Build conversation context from history
+function buildConversationContext(history) {
+  if (!history || history.length === 0) {
+    return "No previous conversation history.";
+  }
+  
+  let context = "Previous conversation history:\n\n";
+  
+  history.forEach((msg, index) => {
+    const speaker = msg.role === 'user' ? 'User' : 'Krishana';
+    context += `${speaker}: ${msg.content}\n`;
+    
+    // Add separator between conversation turns
+    if (index < history.length - 1) {
+      context += "---\n";
+    }
+  });
+  
+  return context;
+}
+
+// Check if current message is asking about previous conversation
+function isHistoryRelatedQuery(message, history) {
+  const historyKeywords = [
+    'name', 'naam', 'bataya', 'told', 'said', 'mentioned',
+    'kya', 'what', 'who', 'when', 'where', 'kaun', 'kab',
+    'previous', 'pichla', 'last', 'pehle', 'before',
+    'remember', 'yaad', 'recall', 'batao', 'tell me'
+  ];
+  
+  const messageLower = message.toLowerCase();
+  
+  // Check if message contains history-related keywords
+  const hasHistoryKeyword = historyKeywords.some(keyword => 
+    messageLower.includes(keyword)
+  );
+  
+  // Check if this might be referring to something in history
+  if (hasHistoryKeyword && history.length > 0) {
+    return true;
+  }
+  
+  // Check for specific patterns like "mera name kya hai" after user already told their name
+  if ((messageLower.includes('name') || messageLower.includes('naam')) && 
+      messageLower.includes('kya') || messageLower.includes('what')) {
+    
+    // Look for previous mention of name in history
+    const hasNameInHistory = history.some(msg => 
+      msg.role === 'user' && 
+      (msg.content.toLowerCase().includes('name') || 
+       msg.content.toLowerCase().includes('naam') ||
+       msg.content.toLowerCase().includes('mera') && msg.content.toLowerCase().includes('hai'))
+    );
+    
+    if (hasNameInHistory) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+// Extract specific information from history
+function extractInfoFromHistory(message, history) {
+  const messageLower = message.toLowerCase();
+  
+  // Name extraction
+  if (messageLower.includes('name') || messageLower.includes('naam')) {
+    const nameMessages = history.filter(msg => 
+      msg.role === 'user' && 
+      (msg.content.toLowerCase().includes('name') || 
+       msg.content.toLowerCase().includes('naam') ||
+       msg.content.toLowerCase().includes('mera') && msg.content.toLowerCase().includes('hai'))
+    );
+    
+    if (nameMessages.length > 0) {
+      const lastNameMessage = nameMessages[nameMessages.length - 1];
+      // Simple extraction - look for words after "mera name" or similar patterns
+      const content = lastNameMessage.content.toLowerCase();
+      if (content.includes('mera name')) {
+        const parts = content.split('mera name');
+        if (parts[1]) {
+          const namePart = parts[1].trim().split(' ')[0];
+          if (namePart && namePart.length > 1) {
+            return { type: 'name', value: namePart };
+          }
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
+async function generateFriendlyResponse(content, userMessage, history = []) {
   try {
     // Detect user's language and style from their message
     const userLanguage = detectLanguage(userMessage);
     const userTone = detectTone(userMessage);
     const possibleGender = detectPossibleGender(userMessage);
+    
+    // Build conversation context
+    const conversationContext = buildConversationContext(history);
+    
+    // Check if this is a history-related query
+    const isHistoryQuery = isHistoryRelatedQuery(userMessage, history);
+    const extractedInfo = extractInfoFromHistory(userMessage, history);
+    
+    let contextInstruction = "";
+    
+    if (isHistoryQuery && history.length > 0) {
+      contextInstruction = `
+IMPORTANT: The user is asking about something from our previous conversation. 
+Please refer to the conversation history and answer based on what was discussed earlier.
+
+${conversationContext}
+
+Current user question: "${userMessage}"
+`;
+      
+      if (extractedInfo) {
+        if (extractedInfo.type === 'name') {
+          contextInstruction += `\nNote: The user previously mentioned their name is "${extractedInfo.value}". Use this information in your response naturally.`;
+        }
+      }
+    } else {
+      contextInstruction = `
+${conversationContext}
+
+Current user message: "${userMessage}"
+Current context: ${content}
+`;
+    }
     
     const prompt = `${HUMAN_LIKE_SYSTEM_INSTRUCTION}
 
@@ -157,9 +284,14 @@ User's language: ${userLanguage}
 User's tone: ${userTone}
 Possible gender: ${possibleGender}
 
-Current context: ${content}
+${contextInstruction}
 
-Now respond naturally as Alex, keeping in mind the user's language, tone, and style. Be a real friend having a conversation.`;
+Now respond naturally as Krishana, keeping in mind:
+1. The user's language, tone, and style
+2. Our previous conversation history
+3. Be a real friend having a conversation
+4. If they're asking about something we discussed before, refer to it naturally
+5. Never say "you told me" or "in our previous conversation" - just refer to it naturally like a human would`;
 
     const result = await model.generateContent(prompt);
     const response = await result.response;
@@ -242,9 +374,12 @@ function needsSearch(query, history) {
 // Process user input with history management
 async function processUserInput(userInput, history = []) {
   try {
+    console.log('📝 Processing user input with history length:', history.length);
+    console.log('💬 Full history:', history);
+    
     // Check if we can answer from history for date-related questions
     if ((userInput.toLowerCase().includes('today') && userInput.toLowerCase().includes('date')) ||
-        userInput.toLowerCase().includes('current date') ||
+        userInput.toLowerCase().includes('current date') || 
         userInput.toLowerCase().includes("what's the date") ||
         userInput.toLowerCase().includes('aaj ka din')) {
       
@@ -265,13 +400,25 @@ async function processUserInput(userInput, history = []) {
       }
     }
     
+    // Check if this is a history-related question that doesn't need search
+    const isHistoryQuery = isHistoryRelatedQuery(userInput, history);
+    
+    if (isHistoryQuery) {
+      console.log('🗣️ History-related query detected, answering from context');
+      const contextResponse = await generateFriendlyResponse(userInput, userInput, history);
+      return {
+        response: contextResponse,
+        usedSearch: false
+      };
+    }
+    
     // Determine if we need to search
     const shouldSearch = needsSearch(userInput, history);
     
     if (!shouldSearch) {
-      // Answer directly without search
-      console.log('💬 Answering directly without search');
-      const directResponse = await generateFriendlyResponse(userInput, userInput);
+      // Answer directly without search but with history context
+      console.log('💬 Answering directly with history context');
+      const directResponse = await generateFriendlyResponse(userInput, userInput, history);
       return {
         response: directResponse,
         usedSearch: false
@@ -285,8 +432,9 @@ async function processUserInput(userInput, history = []) {
     
     if (searchResults && searchResults.trim() && !searchResults.includes('No relevant information found')) {
       const friendlyResponse = await generateFriendlyResponse(
-        `I need to respond to this user message: "${userInput}". Here's the real-time information I found: ${searchResults}\n\nPlease respond naturally as Alex, incorporating this information in a friendly, human way.`,
-        userInput
+        `I need to respond to this user message: "${userInput}". Here's the real-time information I found: ${searchResults}`,
+        userInput,
+        history
       );
       
       return {
@@ -294,9 +442,9 @@ async function processUserInput(userInput, history = []) {
         usedSearch: true
       };
     } else {
-      // If search didn't find results, answer directly
-      console.log('🔍 Search returned no results, answering directly');
-      const directResponse = await generateFriendlyResponse(userInput, userInput);
+      // If search didn't find results, answer directly with history context
+      console.log('🔍 Search returned no results, answering directly with history context');
+      const directResponse = await generateFriendlyResponse(userInput, userInput, history);
       return {
         response: directResponse,
         usedSearch: false

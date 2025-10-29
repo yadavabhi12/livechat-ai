@@ -1689,6 +1689,75 @@
       typingIndicator.classList.remove('active');
     }
 
+    // Save chat history with timestamp
+    function saveChatHistory() {
+      const historyData = {
+        messages: chatHistory,
+        timestamp: Date.now(),
+        expiry: Date.now() + (6 * 60 * 60 * 1000) // 6 hours from now
+      };
+      localStorage.setItem('krishanaChatHistory', JSON.stringify(historyData));
+      console.log('History saved:', historyData);
+    }
+
+    // Load chat history and check expiry
+    function loadChatHistory() {
+      const savedHistory = localStorage.getItem('krishanaChatHistory');
+      
+      if (savedHistory) {
+        try {
+          const historyData = JSON.parse(savedHistory);
+          const now = Date.now();
+          
+          console.log('Loaded history:', historyData);
+          console.log('Current time:', now);
+          console.log('Expiry time:', historyData.expiry);
+          
+          // Check if history has expired (6 hours)
+          if (now > historyData.expiry) {
+            // History expired, clear it
+            console.log('History expired, clearing...');
+            localStorage.removeItem('krishanaChatHistory');
+            chatHistory = [];
+            return;
+          }
+          
+          // Load valid history
+          chatHistory = historyData.messages || [];
+          console.log('Chat history loaded:', chatHistory);
+          
+          // Clear existing messages
+          messagesArea.innerHTML = '';
+          
+          // Display messages in UI
+          chatHistory.forEach(msg => {
+            if (msg.role === 'user') addMessage(msg.content, 'user');
+            else if (msg.role === 'assistant') addMessage(msg.content, 'ai');
+          });
+        } catch (e) {
+          console.error('Error loading history:', e);
+          chatHistory = [];
+        }
+      } else {
+        console.log('No saved history found');
+      }
+    }
+
+    // Manage chat history to maintain context
+    function manageChatHistory(userMessage, aiResponse) {
+      // Add new messages to history
+      chatHistory.push({ role: 'user', content: userMessage });
+      chatHistory.push({ role: 'assistant', content: aiResponse });
+      
+      // If history exceeds 10 messages, remove oldest 5 messages
+      if (chatHistory.length > 10) {
+        chatHistory = chatHistory.slice(5); // Keep the most recent 5 messages
+      }
+      
+      // Save to localStorage with timestamp
+      saveChatHistory();
+    }
+
     // Send message
     async function sendMessage() {
       const message = messageInput.value.trim();
@@ -1704,10 +1773,14 @@
       showTyping();
 
       try {
-        const response = await fetch('https://livechat-ai.onrender.com/chat', {
+        console.log('Sending message with history:', chatHistory);
+        const response = await fetch('http://localhost:3000/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ message, history: chatHistory })
+          body: JSON.stringify({ 
+            message: message, 
+            history: chatHistory 
+          })
         });
 
         const data = await response.json();
@@ -1715,14 +1788,7 @@
 
         if (data.success) {
           addMessage(data.response, 'ai');
-          chatHistory.push({ role: 'user', content: message });
-          chatHistory.push({ role: 'assistant', content: data.response });
-          
-          if (chatHistory.length > 20) {
-            chatHistory = chatHistory.slice(-20);
-          }
-          
-          localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
+          manageChatHistory(message, data.response);
         } else {
           addMessage("Sorry! I'm having some technical issues. Please try again! 😅", 'ai');
         }
@@ -1750,7 +1816,7 @@
     clearChatBtn.addEventListener('click', () => {
       if (confirm('Clear all chat history?')) {
         chatHistory = [];
-        localStorage.removeItem('chatHistory');
+        localStorage.removeItem('krishanaChatHistory');
         messagesArea.innerHTML = '';
         setTimeout(() => addMessage("Chat cleared! Let's start fresh! 🎯", 'ai'), 300);
       }
@@ -1791,19 +1857,9 @@
     
     setTheme(savedTheme);
     setBackground(savedBackground);
-
-    const savedHistory = localStorage.getItem('chatHistory');
-    if (savedHistory) {
-      try {
-        chatHistory = JSON.parse(savedHistory);
-        chatHistory.forEach(msg => {
-          if (msg.role === 'user') addMessage(msg.content, 'user');
-          else if (msg.role === 'assistant') addMessage(msg.content, 'ai');
-        });
-      } catch (e) {
-        console.error('Error loading history:', e);
-      }
-    }
+    
+    // Load chat history with expiry check
+    loadChatHistory();
 
     messageInput.focus();
   </script>

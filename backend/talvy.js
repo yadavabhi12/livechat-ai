@@ -13,6 +13,7 @@ if (!apiKey) {
 // Initialize Tavily client
 const tvly = tavily({ apiKey });
 
+
 /**
  * Perform a web search using Tavily API
  * @param {string} query - The search query
@@ -20,6 +21,7 @@ const tvly = tavily({ apiKey });
  * @returns {Promise<string>} - Formatted search results
  */
 async function search(query, options = {}) {
+
   // Validate input
   if (!query || typeof query !== 'string' || query.trim().length === 0) {
     throw new Error("❌ Invalid search query. Please provide a non-empty string.");
